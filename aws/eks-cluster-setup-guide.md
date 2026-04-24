@@ -5,11 +5,11 @@
 ## 1. Prerequisites
 
 ### 1.1. Required Tools
-- AWS CLI v2.0+
-- kubectl
-- eksctl
-- AWS IAM Authenticator
-- Helm v3
+- AWS CLI v2.15+
+- kubectl v1.29+
+- eksctl v0.169+
+- Helm v3.14+
+- Docker or Podman (for container operations)
 
 ### 1.2. AWS Configuration
 ```bash
@@ -32,7 +32,7 @@ kind: ClusterConfig
 metadata:
   name: production-eks
   region: us-west-2
-  version: "1.24"
+  version: "1.29"
 
 managedNodeGroups:
   - name: managed-nodes
@@ -113,19 +113,36 @@ eksctl create iamidentitymapping \
 
 ## 4. Essential Add-ons Installation
 
-### 4.1. AWS Load Balancer Controller
+### 4.1. AWS Load Balancer Controller v2.7+
 
 ```bash
 # Add Helm repo
 helm repo add eks https://aws.github.io/eks-charts
 helm repo update
 
+# Create IAM policy for Load Balancer Controller
+curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+
+aws iam create-policy \
+    --policy-name AWSLoadBalancerControllerIAMPolicy \
+    --policy-document file://iam-policy.json
+
+# Create IAM role and service account
+eksctl create iamserviceaccount \
+  --cluster=production-eks \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --attach-policy-arn=arn:aws:iam::ACCOUNT_ID:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve \
+  --override-existing-serviceaccounts
+
 # Install AWS Load Balancer Controller
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
   --set clusterName=production-eks \
-  --set serviceAccount.create=true \
-  --set serviceAccount.name=aws-load-balancer-controller
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --version 1.7.1
 ```
 
 ### 4.2. Cluster Autoscaler
@@ -159,7 +176,7 @@ spec:
     spec:
       serviceAccountName: cluster-autoscaler
       containers:
-        - image: k8s.gcr.io/autoscaling/cluster-autoscaler:v1.24.0
+        - image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.29.0
           name: cluster-autoscaler
           command:
             - ./cluster-autoscaler
@@ -176,8 +193,21 @@ spec:
 ### 4.3. AWS CloudWatch Container Insights
 
 ```bash
-# Enable Container Insights
-kubectl apply -f https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest.yaml
+# Install CloudWatch Agent using Helm
+helm repo add amazon-cloudwatch https://aws.github.io/amazon-cloudwatch-observability/helm/charts
+helm repo update
+
+# Create IAM policy for CloudWatch Agent
+aws iam create-policy \
+    --policy-name CloudWatchAgentServerPolicy \
+    --policy-document file://cloudwatch-agent-policy.json
+
+# Install CloudWatch Agent
+helm install cloudwatch-observability amazon-cloudwatch/amazon-cloudwatch-observability \
+  --namespace amazon-cloudwatch \
+  --create-namespace \
+  --set clusterName=production-eks \
+  --set region=us-west-2
 ```
 
 ## 5. Networking Configuration
@@ -185,8 +215,8 @@ kubectl apply -f https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch
 ### 5.1. VPC CNI Settings
 
 ```bash
-# Update CNI version
-kubectl apply -f https://raw.githubusercontent.com/aws/amazon-vpc-cni-k8s/release-1.12/config/master/aws-k8s-cni.yaml
+# Update CNI version (latest)
+kubectl apply -f https://raw.githubusercontent.com/aws/amazon-vpc-cni-k8s/release-1.16/config/master/aws-k8s-cni.yaml
 
 # Configure CNI
 kubectl set env daemonset aws-node -n kube-system ENABLE_PREFIX_DELEGATION=true
@@ -209,32 +239,48 @@ spec:
 
 ## 6. Security Configuration
 
-### 6.1. Pod Security Policies
+### 6.1. Pod Security Standards (Kubernetes 1.25+)
 
 ```yaml
-# restricted-psp.yaml
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
+# pod-security-standard.yaml
+apiVersion: v1
+kind: Namespace
 metadata:
-  name: restricted
-spec:
-  privileged: false
-  seLinux:
-    rule: RunAsAny
-  runAsUser:
-    rule: MustRunAsNonRoot
-  fsGroup:
-    rule: RunAsAny
-  volumes:
-  - 'configMap'
-  - 'emptyDir'
-  - 'projected'
-  - 'secret'
-  - 'downwardAPI'
-  - 'persistentVolumeClaim'
+  name: secure-apps
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
 ```
 
-### 6.2. RBAC Configuration
+### 6.2. Security Context Constraints
+
+```yaml
+# security-context.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secure-pod
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 3000
+  containers:
+  - name: app
+    image: myapp:latest
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+```
+
+### 6.3. RBAC Configuration
 
 ```yaml
 # rbac-config.yaml
@@ -358,18 +404,23 @@ spec:
 ## 10. Best Practices
 
 ### 10.1. Cluster Management
-- Regularly update EKS version
-- Use managed node groups
+- Regularly update EKS version (stay within 3 versions of latest)
+- Use managed node groups with EKS Add-ons
 - Implement proper tagging strategy
 - Regular security patches
 - Monitor cluster health
+- Use EKS automatic version upgrades (when available)
+- Implement cluster upgrade windows
 
 ### 10.2. Security
 - Enable control plane logging
 - Use security groups effectively
-- Implement pod security policies
+- Implement Pod Security Standards (replacing PSPs)
 - Regular IAM review
-- Enable encryption at rest
+- Enable encryption at rest (EBS, EKS secrets)
+- Use AWS Secrets Manager or Parameter Store
+- Implement network policies
+- Enable Amazon EKS Pod Identity Agent (for K8s 1.29+)
 
 ### 10.3. Networking
 - Use private endpoints where possible
