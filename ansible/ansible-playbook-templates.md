@@ -1,6 +1,6 @@
 # Ansible Playbook Templates and Best Practices Guide
 
-![banner](https://developers.redhat.com/sites/default/files/2024_AnsibleLP_featured_image_GS_Ansible%20Playbooks_0.png)
+![banner](https://www.ansible.com/hubfs/2019_Assets/Red_Hat_Ansible_Automation_Platform-Logo-RGB_White.png)
 
 ## 1. Project Structure
 
@@ -548,4 +548,697 @@ ansible-playbook playbook.yml --list-hosts
 
 # Step-by-step execution
 ansible-playbook playbook.yml --step
-``` 
+```
+
+## 11. Modern Ansible Features (Ansible 2.15+)
+
+### 11.1. FQCN (Fully Qualified Collection Name)
+
+```yaml
+# Old way (deprecated)
+- name: Install package
+  apt:
+    name: nginx
+    state: present
+
+# New way (recommended)
+- name: Install package
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+
+# Using collections
+- name: Create EC2 instance
+  amazon.aws.ec2_instance:
+    instance_type: t3.micro
+    image_id: ami-12345678
+```
+
+### 11.2. Error Handling with Blocks
+
+```yaml
+- name: Deploy application with error handling
+  block:
+    - name: Stop application
+      systemd:
+        name: myapp
+        state: stopped
+    
+    - name: Deploy new version
+      git:
+        repo: "{{ app_repo }}"
+        dest: "{{ app_path }}"
+        version: "{{ app_version }}"
+    
+    - name: Start application
+      systemd:
+        name: myapp
+        state: started
+  
+  rescue:
+    - name: Rollback deployment
+      git:
+        repo: "{{ app_repo }}"
+        dest: "{{ app_path }}"
+        version: "{{ previous_version }}"
+    
+    - name: Restart application
+      systemd:
+        name: myapp
+        state: restarted
+    
+    - name: Send alert
+      uri:
+        url: "{{ alert_webhook }}"
+        method: POST
+        body: '{"status": "failed", "host": "{{ inventory_hostname }}"}'
+  
+  always:
+    - name: Cleanup temporary files
+      file:
+        path: /tmp/deploy_temp
+        state: absent
+```
+
+### 11.3. Loops and Iteration Improvements
+
+```yaml
+# Using loop instead of with_items
+- name: Create users
+  user:
+    name: "{{ item.name }}"
+    groups: "{{ item.groups }}"
+  loop:
+    - { name: alice, groups: sudo }
+    - { name: bob, groups: developers }
+
+# Using loop with register
+- name: Check multiple services
+  service_facts:
+  register: services
+
+- name: Display running services
+  debug:
+    msg: "{{ item }}"
+  loop: "{{ services.ansible_facts.services | dict2items | selectattr('value.state', 'equalto', 'running') | list }}"
+
+# Using until loop with retries
+- name: Wait for service to be ready
+  uri:
+    url: "http://localhost:8080/health"
+    return_content: yes
+  register: result
+  until: result.content == "OK"
+  retries: 10
+  delay: 5
+```
+
+### 11.4. Filters and Jinja2 Templates
+
+```yaml
+# Using filters
+- name: Set variable with default
+  debug:
+    msg: "{{ my_var | default('default_value') }}"
+
+# Using filters for lists
+- name: Filter list
+  debug:
+    msg: "{{ my_list | selectattr('status', 'equalto', 'active') | list }}"
+
+# Using filters for strings
+- name: Convert to uppercase
+  debug:
+    msg: "{{ my_string | upper }}"
+
+# Using custom filters in filter_plugins/
+# filter_plugins/my_filters.py
+def reverse_string(s):
+    return s[::-1]
+
+class FilterModule(object):
+    def filters(self):
+        return {
+            'reverse_string': reverse_string
+        }
+
+# Usage in playbook
+- name: Reverse string
+  debug:
+    msg: "{{ my_string | reverse_string }}"
+```
+
+### 11.5. Async Tasks
+
+```yaml
+- name: Run long task asynchronously
+  command: /usr/bin/long_running_script
+  async: 3600
+  poll: 0
+  register: long_task
+
+- name: Do other tasks while waiting
+  debug:
+    msg: "Doing other work..."
+
+- name: Wait for long task to complete
+  async_status:
+    jid: "{{ long_task.ansible_job_id }}"
+  register: task_result
+  until: task_result.finished
+  retries: 30
+  delay: 10
+```
+
+## 12. Ansible Collections Usage
+
+### 12.1. AWS Collection
+
+```yaml
+- name: Create EC2 instance
+  amazon.aws.ec2_instance:
+    name: my-instance
+    instance_type: t3.micro
+    image_id: ami-12345678
+    region: us-west-2
+    vpc_subnet_id: subnet-12345
+    security_groups:
+      - sg-12345
+    tags:
+      Environment: production
+      Application: myapp
+
+- name: Create S3 bucket
+  amazon.aws.s3_bucket:
+    name: my-bucket
+    region: us-west-2
+    state: present
+    public_access:
+      block_public_acls: true
+      block_public_policy: true
+```
+
+### 12.2. Kubernetes Collection
+
+```yaml
+- name: Create Kubernetes deployment
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: myapp
+        namespace: default
+      spec:
+        replicas: 3
+        selector:
+          matchLabels:
+            app: myapp
+        template:
+          metadata:
+            labels:
+              app: myapp
+          spec:
+            containers:
+            - name: myapp
+              image: myapp:latest
+              ports:
+              - containerPort: 8080
+
+- name: Apply Helm chart
+  kubernetes.core.helm:
+    name: mychart
+    chart_ref: stable/nginx
+    release_namespace: default
+    values:
+      service:
+        type: LoadBalancer
+```
+
+### 12.3. Docker Collection
+
+```yaml
+- name: Pull Docker image
+  community.docker.docker_image:
+    name: nginx:latest
+    source: pull
+
+- name: Run Docker container
+  community.docker.docker_container:
+    name: mycontainer
+    image: nginx:latest
+    state: started
+    ports:
+      - "80:80"
+    volumes:
+      - /data:/data
+
+- name: Build Docker image
+  community.docker.docker_image:
+    name: myapp:latest
+    build:
+      path: /path/to/dockerfile
+    source: build
+```
+
+### 12.4. Community General Collection
+
+```yaml
+- name: Manage PostgreSQL database
+  community.postgresql.postgresql_db:
+    name: mydb
+    state: present
+
+- name: Manage PostgreSQL user
+  community.postgresql.postgresql_user:
+    db: mydb
+    name: myuser
+    password: "{{ vault_db_password }}"
+    priv: "ALL"
+
+- name: Manage GitLab project
+  community.general.gitlab_project:
+    api_url: https://gitlab.example.com
+    api_token: "{{ gitlab_token }}"
+    name: myproject
+    state: present
+```
+
+## 13. CI/CD Integration
+
+### 13.1. GitHub Actions
+
+```yaml
+# .github/workflows/ansible-deploy.yml
+name: Ansible Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install Ansible
+      run: pip install ansible-core ansible-lint
+    
+    - name: Install Galaxy collections
+      run: ansible-galaxy collection install -r requirements.yml
+    
+    - name: Install Galaxy roles
+      run: ansible-galaxy role install -r requirements.yml
+    
+    - name: Lint playbooks
+      run: ansible-lint playbooks/
+    
+    - name: Run syntax check
+      run: ansible-playbook playbooks/site.yml --syntax-check
+    
+    - name: Configure SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+    
+    - name: Deploy to production
+      env:
+        ANSIBLE_VAULT_PASSWORD: ${{ secrets.VAULT_PASSWORD }}
+      run: |
+        echo $ANSIBLE_VAULT_PASSWORD > .vault_pass
+        ansible-playbook playbooks/site.yml -i inventory/production --vault-password-file .vault_pass
+```
+
+### 13.2. Jenkins Pipeline
+
+```groovy
+pipeline {
+    agent any
+    
+    environment {
+        ANSIBLE_VAULT_PASSWORD = credentials('ansible-vault-password')
+        SSH_PRIVATE_KEY = credentials('ssh-private-key')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                sh 'pip install ansible-core ansible-lint'
+                sh 'ansible-galaxy collection install -r requirements.yml'
+                sh 'ansible-galaxy role install -r requirements.yml'
+            }
+        }
+        
+        stage('Lint') {
+            steps {
+                sh 'ansible-lint playbooks/'
+            }
+        }
+        
+        stage('Syntax Check') {
+            steps {
+                sh 'ansible-playbook playbooks/site.yml --syntax-check'
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'ansible-vault-password', variable: 'VAULT_PASS'),
+                    sshUserPrivateKey(credentialsId: 'ssh-private-key', keyFileVariable: 'SSH_KEY_FILE')
+                ]) {
+                    sh '''
+                        echo $VAULT_PASS > .vault_pass
+                        chmod 600 $SSH_KEY_FILE
+                        export ANSIBLE_HOST_KEY_CHECKING=False
+                        ansible-playbook playbooks/site.yml -i inventory/production --vault-password-file .vault_pass --private-key $SSH_KEY_FILE
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            sh 'rm -f .vault_pass'
+        }
+    }
+}
+```
+
+### 13.3. GitLab CI
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - lint
+  - test
+  - deploy
+
+variables:
+  ANSIBLE_IMAGE: ansible/ansible:latest
+
+before_script:
+  - pip install ansible-core ansible-lint
+  - ansible-galaxy collection install -r requirements.yml
+  - ansible-galaxy role install -r requirements.yml
+
+lint:
+  stage: lint
+  script:
+    - ansible-lint playbooks/
+
+syntax-check:
+  stage: test
+  script:
+    - ansible-playbook playbooks/site.yml --syntax-check
+
+deploy-staging:
+  stage: deploy
+  environment:
+    name: staging
+  script:
+    - echo $VAULT_PASSWORD > .vault_pass
+    - ansible-playbook playbooks/site.yml -i inventory/staging --vault-password-file .vault_pass
+  only:
+    - develop
+
+deploy-production:
+  stage: deploy
+  environment:
+    name: production
+  script:
+    - echo $VAULT_PASSWORD > .vault_pass
+    - ansible-playbook playbooks/site.yml -i inventory/production --vault-password-file .vault_pass
+  only:
+    - main
+  when: manual
+```
+
+## 14. Testing Strategies
+
+### 14.1. Molecule Testing
+
+```bash
+# Install molecule
+pip install molecule molecule-docker molecule-testinfra
+
+# Initialize molecule for role
+molecule init role myrole -d docker
+
+# molecule/default/molecule.yml
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+platforms:
+  - name: instance
+    image: ubuntu:22.04
+    pre_build_image: true
+provisioner:
+  name: ansible
+verifier:
+  name: ansible
+```
+
+```python
+# molecule/default/tests/test_default.py
+import os
+
+import testinfra.utils.ansible_runner
+
+testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
+    os.environ['MOLECULE_INVENTORY_FILE']).get_hosts()
+
+
+def test_nginx_is_installed(host):
+    nginx = host.package("nginx")
+    assert nginx.is_installed
+
+
+def test_nginx_is_running(host):
+    nginx = host.service("nginx")
+    assert nginx.is_running
+    assert nginx.is_enabled
+
+
+def test_nginx_listening(host):
+    assert host.socket("tcp://0.0.0.0:80").is_listening
+```
+
+### 14.2. Ansible Lint
+
+```bash
+# Install ansible-lint
+pip install ansible-lint
+
+# Run linter
+ansible-lint playbooks/
+
+# .ansible-lint configuration
+# .ansible-lint
+profile: production
+exclude_paths:
+  - .cache/
+  - .git/
+warn_list:
+  - experimental
+  - ignore-errors
+skip_list:
+  - yaml[line-length]
+  - name[missing]
+```
+
+### 14.3. Integration Tests
+
+```yaml
+# tests/integration/test_playbook.yml
+---
+- name: Integration Test
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  
+  tasks:
+    - name: Test playbook syntax
+      command: ansible-playbook playbooks/site.yml --syntax-check
+      register: syntax_check
+      failed_when: syntax_check.rc != 0
+    
+    - name: Test playbook execution
+      command: ansible-playbook playbooks/site.yml -i inventory/test --check
+      register: execution_check
+      failed_when: execution_check.rc != 0
+```
+
+## 15. Performance Optimization
+
+### 15.1. Strategy Plugins
+
+```yaml
+# Use free strategy for parallel execution
+- name: Deploy to all hosts in parallel
+  hosts: all
+  strategy: free
+  tasks:
+    - name: Deploy application
+      include_role:
+        name: app_deploy
+
+# Use linear strategy (default)
+- name: Deploy sequentially
+  hosts: all
+  strategy: linear
+  tasks:
+    - name: Deploy application
+      include_role:
+        name: app_deploy
+```
+
+### 15.2. Fact Caching
+
+```ini
+# ansible.cfg
+[defaults]
+fact_caching = redis
+fact_caching_timeout = 3600
+fact_caching_connection = localhost:6379:0
+```
+
+```yaml
+# Disable fact gathering when not needed
+- name: Run without facts
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Simple task
+      debug:
+        msg: "Hello World"
+```
+
+### 15.3. SSH Optimization
+
+```ini
+# ansible.cfg
+[ssh_connection]
+pipelining = True
+control_path = %(directory)s/%%h-%%r
+control_path_dir = /tmp/.ansible/cp
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o PreferredAuthentications=publickey
+```
+
+## 16. Security Best Practices
+
+### 16.1. Ansible Vault
+
+```yaml
+# Use vault for secrets
+- name: Configure database
+  template:
+    src: database.conf.j2
+    dest: /etc/database.conf
+    mode: '0600'
+  vars:
+    db_password: "{{ vault_db_password }}"
+```
+
+### 16.2. No_log for Sensitive Data
+
+```yaml
+- name: Create user with password
+  user:
+    name: "{{ username }}"
+    password: "{{ password }}"
+  no_log: true
+```
+
+### 16.3. Become Method
+
+```yaml
+# Use become for privilege escalation
+- name: Install package
+  apt:
+    name: nginx
+    state: present
+  become: true
+  become_method: sudo
+  become_user: root
+```
+
+## 17. Monitoring and Logging
+
+### 17.1. Callback Plugins
+
+```ini
+# ansible.cfg
+[defaults]
+callback_whitelist = timer, profile_tasks, yaml
+```
+
+```yaml
+# Custom callback plugin
+# callback_plugins/my_callback.py
+from ansible.plugins.callback import CallbackBase
+
+class CallbackModule(CallbackBase):
+    CALLBACK_VERSION = 2.0
+    CALLBACK_TYPE = 'notification'
+    CALLBACK_NAME = 'my_callback'
+    
+    def v2_playbook_on_task_start(self, task, is_conditional):
+        self._display.display(f"Starting task: {task.name}", color='blue')
+```
+
+### 17.2. ARA (Ansible Run Analysis)
+
+```bash
+# Install ARA
+pip install ara
+
+# Configure ansible.cfg
+[defaults]
+callback_plugins = /usr/local/lib/python3.10/site-packages/ara/plugins/callback
+action_plugins = /usr/local/lib/python3.10/site-packages/ara/plugins/action
+
+# Start ARA server
+ara-manage runserver
+```
+
+## 18. Best Practices Summary
+
+1. **Use FQCN** for all modules
+2. **Use collections** for extended functionality
+3. **Implement proper error handling** with blocks
+4. **Use Ansible Vault** for sensitive data
+5. **Test playbooks** with molecule and ansible-lint
+6. **Use idempotent** operations
+7. **Implement CI/CD** integration
+8. **Use fact caching** for performance
+9. **Document your code** with comments
+10. **Use tags** for selective execution
+11. **Implement proper logging** and monitoring
+12. **Regular updates** of Ansible and collections
+
+## References
+
+- [Ansible Documentation](https://docs.ansible.com/)
+- [Ansible Galaxy](https://galaxy.ansible.com/)
+- [Ansible Collections](https://docs.ansible.com/ansible/latest/collections/index.html)
+- [Molecule Documentation](https://molecule.readthedocs.io/)
+- [Ansible Lint](https://ansible-lint.readthedocs.io/)
