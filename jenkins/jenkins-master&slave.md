@@ -1,115 +1,395 @@
-# Install Jenkins on Ubuntu & Setup Jenkins Master-Slave configuration
+# Install Jenkins on Ubuntu & Setup Jenkins Master-Agent Configuration
 
 ![jenkins](https://imgur.com/d4TaKyx.png)
 
-To install Jenkins on Ubuntu and set up a master-slave configuration, you can follow these steps. Jenkins is a popular open-source automation server, and this guide will help you create a Jenkins master and connect one or more Jenkins slave nodes to distribute workloads.
+This guide provides detailed steps for installing Jenkins on Ubuntu and setting up a master-agent (formerly master-slave) configuration for distributed builds.
 
-### Installing Jenkins on Ubuntu:
+## Prerequisites
 
-1. **Update Package Index:**
-   ```bash
-   sudo apt update
-   ```
+- Ubuntu 20.04 or later
+- Minimum 2GB RAM (4GB recommended)
+- 10GB free disk space
+- Root or sudo access
+- Java JDK 11 or later
 
-2. **Install Java Development Kit (JDK):**
-   Jenkins requires Java to run. You can install OpenJDK using the following command:
-   ```bash
-   sudo apt install openjdk-8-jdk
-   ```
+## Installing Jenkins on Ubuntu
 
-3. **Add Jenkins Repository Key:**
-   ```bash
-   wget -q -O - https://pkg.jenkins.io/debian/jenkins.io.key | sudo apt-key add -
-   ```
+### 1. Update Package Index
 
-4. **Add Jenkins Repository to Your System:**
-   ```bash
-   sudo sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
-   ```
+```bash
+sudo apt update
+sudo apt upgrade -y
+```
 
-5. **Update Package Index Again:**
-   ```bash
-   sudo apt update
-   ```
+### 2. Install Java Development Kit (JDK)
 
-6. **Install Jenkins:**
-   ```bash
-   sudo apt install jenkins
-   ```
+Jenkins requires Java 11 or later. Install OpenJDK 17:
 
-7. **Start Jenkins Service:**
-   ```bash
-   sudo systemctl start jenkins
-   ```
+```bash
+sudo apt install -y openjdk-17-jdk
 
-8. **Enable Jenkins to Start on Boot:**
-   ```bash
-   sudo systemctl enable jenkins
-   ```
+# Verify Java installation
+java -version
 
-9. **Check Jenkins Service Status:**
-   ```bash
-   sudo systemctl status jenkins
-   ```
+# Set JAVA_HOME environment variable
+echo 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64' | sudo tee -a /etc/environment
+source /etc/environment
+```
 
-   If Jenkins is running properly, you should see an active status.
+### 3. Add Jenkins Repository
 
-10. **Configure Firewall (if necessary):**
-    If you have UFW (Uncomplicated Firewall) enabled, you need to allow traffic on port 8080 (Jenkins default port).
-    ```bash
-    sudo ufw allow 8080
-    ```
+```bash
+# Install dependencies
+sudo apt install -y curl gnupg
 
-### Setting Up Jenkins Master-Slave Configuration:
+# Add Jenkins GPG key
+curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | sudo gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
 
-#### Configure Jenkins Master:
+# Add Jenkins repository
+echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/" | sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+```
 
-1. **Access Jenkins Web Interface:**
-   Open your web browser and navigate to `http://your_server_ip_or_domain:8080`. You will be prompted to enter the initial administrator password.
+### 4. Install Jenkins
 
-2. **Unlock Jenkins:**
-   To retrieve the initial password, you can use the following command:
-   ```bash
-   sudo cat /var/lib/jenkins/secrets/initialAdminPassword
-   ```
+```bash
+# Update package index
+sudo apt update
 
-3. **Install Recommended Plugins:**
-   Choose "Install suggested plugins" to install the recommended plugins.
+# Install Jenkins
+sudo apt install -y jenkins
 
-4. **Create Admin User:** 
-   Follow the instructions to create an administrator user for Jenkins.
+# Start Jenkins service
+sudo systemctl start jenkins
 
-5. **Set Jenkins URL:**
-   After setting up the admin user, you'll be asked to set the Jenkins URL. Ensure it's correctly set based on your server's configuration.
+# Enable Jenkins to start on boot
+sudo systemctl enable jenkins
 
-6. **Finish Installation:**
-   Once the setup is complete, you'll be redirected to the Jenkins dashboard.
+# Check Jenkins service status
+sudo systemctl status jenkins
+```
 
-#### Configure Jenkins Slave:
+### 5. Configure Firewall
 
-1. **Install Java Development Kit (JDK) on Slave Machine:**
-   Follow the same steps as mentioned above to install Java on your slave machine.
+```bash
+# Allow Jenkins default port 8080
+sudo ufw allow 8080/tcp
 
-2. **Enable SSH Access from Master to Slave:**
-   Ensure that the master server can SSH into the slave without requiring a password. You might need to generate SSH keys and copy them to the slave.
+# Allow SSH (if not already allowed)
+sudo ufw allow 22/tcp
 
-3. **Add Slave Node in Jenkins:**
-   - Go to Jenkins dashboard -> Manage Jenkins -> Manage Nodes and Clouds -> New Node.
-   - Enter a name for your node and select "Permanent Agent".
-   - Configure the remote root directory, labels, and other settings as per your requirement.
-   - Under "Launch method", choose "Launch agent via SSH".
-   - Enter the slave machine's SSH details (hostname, username, and private key).
+# Enable firewall
+sudo ufw enable
+```
 
-4. **Save Configuration:**
-   Save the configuration, and Jenkins will attempt to connect to the slave machine.
+### 6. Access Jenkins Web Interface
 
-5. **Verify Connection:**
-   After saving, Jenkins will attempt to connect to the slave machine. If the connection is successful, the node will appear in the list of nodes.
+1. Open your web browser and navigate to `http://your_server_ip:8080`
+2. Retrieve the initial administrator password:
 
-6. **Set Up Labels and Usage:**
-   You can set labels on your slave nodes and configure Jenkins jobs to run on specific nodes based on these labels.
+```bash
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+```
 
-7. **Testing:**
-   Create a Jenkins job and configure it to run on the slave node. Run the job to verify that the setup is working correctly.
+3. Enter the password to unlock Jenkins
+4. Select "Install suggested plugins" or choose custom plugins
+5. Create an admin user account
+6. Set the Jenkins URL (auto-detected, but verify it's correct)
+7. Click "Save and Finish" to complete setup
 
-That's it! You now have Jenkins installed on Ubuntu and a Master-Slave configuration set up.
+## Jenkins Master-Agent Configuration
+
+### Configure Jenkins Master
+
+1. **Access Jenkins Dashboard**: Navigate to `http://your_server_ip:8080`
+
+2. **Install Required Plugins**:
+   - Go to `Manage Jenkins` > `Manage Plugins` > `Available` tab
+   - Install "SSH Build Agents" plugin
+   - Restart Jenkins if required
+
+### Configure Jenkins Agent (Slave)
+
+#### Option A: Using SSH (Recommended)
+
+**On Agent Machine:**
+
+```bash
+# Update package index
+sudo apt update
+
+# Install Java JDK
+sudo apt install -y openjdk-17-jdk
+
+# Verify Java installation
+java -version
+
+# Create Jenkins user
+sudo useradd -m -s /bin/bash jenkins
+
+# Set password for Jenkins user
+sudo passwd jenkins
+
+# Add Jenkins user to sudoers (optional, for specific tasks)
+sudo usermod -aG sudo jenkins
+
+# Create workspace directory
+sudo mkdir -p /home/jenkins/workspace
+sudo chown -R jenkins:jenkins /home/jenkins/workspace
+```
+
+**On Master Machine:**
+
+```bash
+# Generate SSH key pair for Jenkins user
+sudo -u jenkins ssh-keygen -t rsa -b 4096 -f /var/lib/jenkins/.ssh/id_rsa -N ""
+
+# Copy public key to agent machine
+sudo -u jenkins ssh-copy-id jenkins@agent_server_ip
+
+# Test SSH connection
+sudo -u jenkins ssh jenkins@agent_server_ip
+```
+
+**Configure Agent in Jenkins UI:**
+
+1. Go to `Manage Jenkins` > `Manage Nodes and Clouds`
+2. Click "New Node"
+3. Enter node name (e.g., `agent-1`)
+4. Select "Permanent Agent"
+5. Click "Create"
+6. Configure the node:
+   - **Number of executors**: `2` (or based on CPU cores)
+   - **Remote root directory**: `/home/jenkins/workspace`
+   - **Labels**: `linux docker maven` (comma-separated)
+   - **Usage**: `Use this node as much as possible`
+   - **Launch method**: `Launch agents via SSH`
+   - **Host**: `agent_server_ip`
+   - **Credentials**: Add SSH credentials (username: `jenkins`, private key from master)
+   - **Host Key Verification Strategy**: `Known hosts file Verification Strategy`
+7. Click "Save"
+8. Click "Launch agent" to test connection
+
+#### Option B: Using JNLP (Java Network Launch Protocol)
+
+**On Agent Machine:**
+
+```bash
+# Create Jenkins user and workspace
+sudo useradd -m -s /bin/bash jenkins
+sudo mkdir -p /home/jenkins/workspace
+sudo chown -R jenkins:jenkins /home/jenkins/workspace
+```
+
+**Configure Agent in Jenkins UI:**
+
+1. Go to `Manage Jenkins` > `Manage Nodes and Clouds`
+2. Click "New Node"
+3. Enter node name and select "Permanent Agent"
+4. Configure the node:
+   - **Remote root directory**: `/home/jenkins/workspace`
+   - **Launch method**: `Launch agent by connecting it to the controller`
+5. Save configuration
+6. Copy the agent command shown
+
+**On Agent Machine:**
+
+```bash
+# Download agent.jar from master
+wget http://master_server_ip:8080/jnlpJars/agent.jar
+
+# Run the agent command (copy from Jenkins UI)
+java -jar agent.jar -url http://master_server_ip:8080 -secret <secret_value> -name agent-1
+```
+
+To run as a service, create a systemd service file:
+
+```bash
+sudo nano /etc/systemd/system/jenkins-agent.service
+```
+
+Add the following content:
+
+```ini
+[Unit]
+Description=Jenkins Agent
+After=network.target
+
+[Service]
+User=jenkins
+WorkingDirectory=/home/jenkins
+ExecStart=/usr/bin/java -jar /home/jenkins/agent.jar -url http://master_server_ip:8080 -secret <secret_value> -name agent-1
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# Reload systemd and start service
+sudo systemctl daemon-reload
+sudo systemctl start jenkins-agent
+sudo systemctl enable jenkins-agent
+```
+
+### Configure Docker on Agent (Optional)
+
+```bash
+# On agent machine
+sudo apt update
+sudo apt install -y docker.io
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker jenkins
+```
+
+## Jenkins Pipeline Configuration for Agents
+
+### Using Node Labels
+
+```groovy
+pipeline {
+    agent { label 'linux' }
+    
+    stages {
+        stage('Build') {
+            steps {
+                sh 'echo "Building on ${env.NODE_NAME}"'
+            }
+        }
+    }
+}
+```
+
+### Using Multiple Agents
+
+```groovy
+pipeline {
+    agent none
+    
+    stages {
+        stage('Build on Linux') {
+            agent { label 'linux' }
+            steps {
+                sh 'echo "Building on Linux agent"'
+            }
+        }
+        
+        stage('Build on Docker Agent') {
+            agent { label 'docker' }
+            steps {
+                sh 'docker --version'
+            }
+        }
+    }
+}
+```
+
+### Parallel Execution on Multiple Agents
+
+```groovy
+pipeline {
+    agent none
+    
+    stages {
+        stage('Parallel Builds') {
+            parallel {
+                stage('Unit Tests') {
+                    agent { label 'linux' }
+                    steps {
+                        sh 'mvn test'
+                    }
+                }
+                stage('Integration Tests') {
+                    agent { label 'docker' }
+                    steps {
+                        sh 'docker-compose up -d'
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+## Best Practices
+
+1. **Use descriptive labels** for agents (e.g., `linux`, `docker`, `maven`, `nodejs`)
+2. **Limit executors** based on CPU cores (typically 1-2 per core)
+3. **Use SSH launch method** for better security and management
+4. **Configure proper resource limits** on agents
+5. **Monitor agent status** regularly
+6. **Use agent templates** for cloud environments
+7. **Implement proper cleanup** for workspaces
+8. **Use tool locations** in Global Tool Configuration for agents
+
+## Troubleshooting
+
+### Agent Connection Issues
+
+```bash
+# Check Jenkins logs on master
+sudo tail -f /var/log/jenkins/jenkins.log
+
+# Check SSH connection from master to agent
+sudo -u jenkins ssh -v jenkins@agent_server_ip
+
+# Check agent logs on agent
+sudo tail -f /var/log/syslog
+```
+
+### Permission Issues
+
+```bash
+# Fix permissions on agent
+sudo chown -R jenkins:jenkins /home/jenkins/workspace
+sudo chmod -R 755 /home/jenkins/workspace
+```
+
+### Java Version Mismatch
+
+```bash
+# Verify Java version on agent
+java -version
+
+# Set JAVA_HOME on agent
+echo 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Service Not Starting
+
+```bash
+# Check Jenkins service status
+sudo systemctl status jenkins
+
+# Restart Jenkins service
+sudo systemctl restart jenkins
+
+# Check for errors in logs
+sudo journalctl -u jenkins -n 50
+```
+
+## Advanced Configuration
+
+### Configure Agent Clouds (AWS, Azure, GCP)
+
+1. Install respective cloud plugins (EC2, Azure VM, GCE)
+2. Go to `Manage Jenkins` > `Manage Nodes and Clouds` > `Configure Clouds`
+3. Add cloud configuration with credentials
+4. Configure agent templates with instance types and labels
+
+### Configure Kubernetes Agents
+
+1. Install Kubernetes plugin
+2. Go to `Manage Jenkins` > `Manage Nodes and Clouds` > `Configure Clouds`
+3. Add Kubernetes cloud configuration
+4. Configure pod templates with containers and tools
+
+### Configure Load Balancing
+
+1. Use Nginx or HAProxy in front of Jenkins
+2. Configure SSL/TLS termination
+3. Set up health checks for Jenkins master
+
+That's it! You now have Jenkins installed on Ubuntu with a master-agent configuration set up for distributed builds.

@@ -1,96 +1,265 @@
 # Setup & Installation for Infrastructure as Code (IaC) Tools on Jenkins
 
-Certainly! Below are the detailed steps for installing Terraform, AWS CLI, Azure CLI, and Google Cloud SDK (gcloud) on a Jenkins server:
+This guide provides detailed steps for installing Terraform, AWS CLI, Azure CLI, and Google Cloud SDK (gcloud) on a Jenkins server.
 
-1. **Installing Terraform**:
+## Prerequisites
 
-   Terraform can be installed by downloading the binary distribution and placing it in a directory that is included in the system's PATH.
+- Ubuntu/Debian or CentOS/RHEL system
+- Root or sudo access
+- Internet connection
 
-   ```bash
-   # Download Terraform binary
-   wget https://releases.hashicorp.com/terraform/1.0.10/terraform_1.0.10_linux_amd64.zip
+## 1. Installing Terraform
 
-   # Extract the downloaded file
-   unzip terraform_1.0.10_linux_amd64.zip
+Terraform can be installed using the official HashiCorp repository for automatic updates.
 
-   # Move Terraform binary to a directory included in the PATH
-   sudo mv terraform /usr/local/bin/
-   ```
+### For Ubuntu/Debian:
 
-   Verify the Terraform installation by running the following command:
+```bash
+# Install dependencies
+sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
 
-   ```bash
-   terraform version
-   ```
+# Add HashiCorp GPG key
+wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 
-2. **Installing AWS CLI**:
+# Add HashiCorp repository
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
 
-   The AWS CLI can be installed using the Python package manager, pip.
+# Update and install Terraform
+sudo apt update
+sudo apt install -y terraform
+```
 
-   ```bash
-   # Install pip if not already installed
-   sudo apt update
-   sudo apt install python3-pip
+### For CentOS/RHEL:
 
-   # Install AWS CLI using pip
-   sudo pip3 install awscli
-   ```
+```bash
+# Install yum-utils
+sudo yum install -y yum-utils
 
-   Verify the AWS CLI installation by running the following command:
+# Add HashiCorp repository
+sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 
-   ```bash
-   aws --version
-   ```
+# Install Terraform
+sudo yum install -y terraform
+```
 
-3. **Installing Azure CLI**:
+### Verify Installation:
 
-   The Azure CLI can be installed using the package manager for the respective Linux distribution.
+```bash
+terraform version
+```
 
-   - For Ubuntu:
+## 2. Installing AWS CLI v2
 
-     ```bash
-     curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-     ```
+The AWS CLI v2 is the recommended version with improved features.
 
-   - For CentOS/RHEL:
+### For Ubuntu/Debian:
 
-     ```bash
-     sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-     sudo sh -c 'echo -e "[azure-cli]
-     name=Azure CLI
-     baseurl=https://packages.microsoft.com/yumrepos/azure-cli
-     enabled=1
-     gpgcheck=1
-     gpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
-     sudo yum install azure-cli
-     ```
+```bash
+# Download AWS CLI v2
+curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip"
 
-   Verify the Azure CLI installation by running the following command:
+# Uninstall previous version if exists
+sudo apt remove -y awscli 2>/dev/null || true
 
-   ```bash
-   az --version
-   ```
+# Extract and install
+unzip awscliv2.zip
+sudo ./aws/install
 
-4. **Installing Google Cloud SDK (gcloud)**:
+# Clean up
+rm -rf aws awscliv2.zip
+```
 
-   The Google Cloud SDK provides the gcloud command-line tool, which can be installed using a package manager or by downloading the binary distribution.
+### For CentOS/RHEL:
 
-   ```bash
-   # Add the Google Cloud SDK distribution URI as a package source
-   export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
-   echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+```bash
+# Download AWS CLI v2
+curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip"
 
-   # Import the Google Cloud Platform public key
-   curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+# Uninstall previous version if exists
+sudo yum remove -y awscli 2>/dev/null || true
 
-   # Update the package list and install the Cloud SDK
-   sudo apt update && sudo apt install google-cloud-sdk
-   ```
+# Extract and install
+unzip awscliv2.zip
+sudo ./aws/install
 
-   Verify the Google Cloud SDK installation by running the following command:
+# Clean up
+rm -rf aws awscliv2.zip
+```
 
-   ```bash
-   gcloud version
-   ```
+### Verify Installation:
+
+```bash
+aws --version
+```
+
+### Configure AWS CLI:
+
+```bash
+aws configure
+```
+
+You'll be prompted to enter:
+- AWS Access Key ID
+- AWS Secret Access Key
+- Default region name
+- Default output format
+
+## 3. Installing Azure CLI
+
+### For Ubuntu/Debian:
+
+```bash
+# Install dependencies
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg
+
+# Download and install Microsoft signing key
+curl -sL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-archive-keyring.gpg
+
+# Add Azure CLI repository
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft-archive-keyring.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
+
+# Update and install Azure CLI
+sudo apt-get update
+sudo apt-get install -y azure-cli
+```
+
+### For CentOS/RHEL:
+
+```bash
+# Download and install Microsoft signing key
+sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+
+# Add Azure CLI repository
+sudo sh -c 'echo -e "[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
+
+# Install Azure CLI
+sudo yum install -y azure-cli
+```
+
+### Verify Installation:
+
+```bash
+az --version
+```
+
+### Login to Azure:
+
+```bash
+az login
+```
+
+## 4. Installing Google Cloud SDK (gcloud)
+
+### For Ubuntu/Debian:
+
+```bash
+# Create environment variable for distribution
+export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -cs)"
+
+# Add the Google Cloud SDK distribution URI as a package source
+echo "deb [signed-by=/usr/share/keyrings/cloud.google.com.gpg] http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+
+# Import the Google Cloud Platform public key
+curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.com.gpg add -
+
+# Update the package list and install the Cloud SDK
+sudo apt-get update && sudo apt-get install -y google-cloud-sdk
+
+# Optional: Install additional components
+sudo apt-get install -y google-cloud-sdk-app-engine-python google-cloud-sdk-app-engine-java
+```
+
+### For CentOS/RHEL:
+
+```bash
+# Create repo file
+sudo tee -a /etc/yum.repos.d/google-cloud-sdk.repo << EOM
+[google-cloud-sdk]
+name=Google Cloud SDK
+baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+       https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOM
+
+# Install Cloud SDK
+sudo yum install -y google-cloud-sdk
+```
+
+### Verify Installation:
+
+```bash
+gcloud version
+```
+
+### Initialize gcloud:
+
+```bash
+gcloud init
+```
+
+## Jenkins Configuration
+
+After installing these tools, configure them in Jenkins:
+
+1. **Global Tool Configuration**:
+   - Navigate to `Manage Jenkins` > `Global Tool Configuration`
+   - Add installations for Terraform, AWS CLI, Azure CLI, and gcloud
+   - Specify installation paths or let Jenkins auto-install
+
+2. **Credentials Management**:
+   - Store cloud credentials in Jenkins Credentials
+   - Use AWS credentials, Azure service principals, and GCP service accounts securely
+
+3. **Environment Variables**:
+   - Set necessary environment variables in Jenkins system configuration
+   - Example: `PATH` to include tool binaries
+
+## Verification
+
+Create a test Jenkins job to verify all installations:
+
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage('Verify Tools') {
+            steps {
+                sh 'terraform version'
+                sh 'aws --version'
+                sh 'az --version'
+                sh 'gcloud version'
+            }
+        }
+    }
+}
+```
+
+## Troubleshooting
+
+### Permission Issues
+
+```bash
+# Fix permissions for Jenkins user
+sudo usermod -aG docker jenkins  # For Docker access
+sudo chmod +x /usr/local/bin/terraform  # If binary not executable
+```
+
+### PATH Issues
+
+Add tool paths to Jenkins environment:
+
+```bash
+# In Jenkins configuration
+export PATH=$PATH:/usr/local/bin:/opt/terraform
+```
 
 After completing these steps, Terraform, AWS CLI, Azure CLI, and Google Cloud SDK should be installed and available on your Jenkins server. You can use them in your Jenkins jobs and pipelines to manage infrastructure on various cloud platforms.
