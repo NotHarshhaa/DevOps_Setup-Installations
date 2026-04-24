@@ -1,65 +1,74 @@
-# **Docker Compose Setup**
+# Docker Compose Setup Guide
 
 ![docker-compose](https://quintagroup.com/cms/technology/Images/docker-compose-button.jpg)
 
-**Docker Compose** is a tool that allows you to define and run multi-container Docker applications using a single YAML file. Here's how to install and set it up on different platforms.
+Docker Compose is a tool for defining and running multi-container Docker applications using a single YAML file. This guide covers installation and setup for all platforms.
 
----
+## Important Note: Docker Compose V2
 
-## **1. Docker Compose Installation**
+Since Docker Desktop 3.4.0 and Docker Engine 20.10.0, Docker Compose V2 is included as a plugin. The new syntax is `docker compose` (without hyphen) instead of `docker-compose`. This guide uses the modern V2 syntax.
 
-### **1.1. For Windows and macOS**
+## 1. Docker Compose Installation
 
-Docker Compose comes pre-installed with Docker Desktop. If Docker Desktop is already installed, Docker Compose is included.
+### 1.1. For Windows and macOS
 
-1. To verify the installation, open **PowerShell** or **Terminal** and run:
+Docker Compose V2 comes pre-installed with Docker Desktop. If Docker Desktop is installed, you already have Docker Compose.
 
-   ```bash
-   docker-compose --version
-   ```
+Verify the installation:
 
-   If Docker Compose is installed, you will see the version.
+```bash
+docker compose version
+```
 
-### **1.2. For Linux**
+### 1.2. For Linux (Ubuntu/Debian)
 
-#### **Step 1: Install Docker Compose**
+Docker Compose V2 is included with the Docker Engine installation. If you installed Docker using the official repository, you already have it.
 
-1. Download the latest version of Docker Compose by running the following commands:
+Verify the installation:
 
-   ```bash
-   sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-   ```
+```bash
+docker compose version
+```
 
-2. Apply executable permissions to the binary:
+If you need to install it separately:
 
-   ```bash
-   sudo chmod +x /usr/local/bin/docker-compose
-   ```
+```bash
+# Download the latest version
+sudo curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
 
-3. Verify the installation:
+# Apply executable permissions
+sudo chmod +x /usr/local/bin/docker-compose
 
-   ```bash
-   docker-compose --version
-   ```
+# Verify
+docker-compose --version
+```
 
-#### **Optional: Install Docker Compose from Package Manager (Alternative Method)**
+### 1.3. For Linux (CentOS/RHEL)
 
-For some Linux distributions, you can install Docker Compose from the official package manager:
+Docker Compose V2 is included with Docker Engine installation. Verify:
 
-   ```bash
-   sudo apt-get install docker-compose
-   ```
+```bash
+docker compose version
+```
 
----
+### 1.4. Legacy Docker Compose V1 (Deprecated)
 
-## **2. Writing a Docker Compose YAML File**
+If you need the standalone V1 version (not recommended):
 
-Docker Compose uses a YAML file to define services, networks, and volumes. Here's an example of a basic `docker-compose.yml` file that sets up a multi-container application with a web server and a database.
+```bash
+sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+docker-compose --version
+```
 
-### **Example `docker-compose.yml`**
+## 2. Writing a Docker Compose YAML File
+
+Docker Compose uses a YAML file to define services, networks, and volumes. Modern Compose files (V2) don't require a version declaration.
+
+### 2.1. Basic Example: Web Server + Database
 
 ```yaml
-version: '3'
+# docker-compose.yml
 services:
   web:
     image: nginx:latest
@@ -69,9 +78,12 @@ services:
       - ./html:/usr/share/nginx/html
     networks:
       - webnet
+    depends_on:
+      - db
+    restart: unless-stopped
 
   db:
-    image: mysql:5.7
+    image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: exampledb
@@ -81,147 +93,395 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - webnet
+    restart: unless-stopped
 
 volumes:
   db_data:
+    driver: local
 
 networks:
   webnet:
+    driver: bridge
 ```
 
-This `docker-compose.yml` defines two services:
+### 2.2. Example with Environment Variables
 
-1. **web**: Uses the official `nginx` image, maps port 8080 on the host to port 80 on the container, and mounts a local directory to serve web content.
-2. **db**: Uses the official `mysql:5.7` image, sets up environment variables for the database configuration, and mounts a volume to persist data.
+```yaml
+# docker-compose.yml
+services:
+  app:
+    image: myapp:latest
+    build: .
+    environment:
+      - DATABASE_URL=mysql://user:password@db:3306/exampledb
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+      - redis
 
----
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - db_data:/var/lib/mysql
 
-## **3. Running a Docker Compose Application**
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
 
-### **Step 1: Navigate to Your Project Directory**
+volumes:
+  db_data:
+```
 
-In the terminal, navigate to the directory containing your `docker-compose.yml` file:
+### 2.3. Example with Custom Network
+
+```yaml
+services:
+  frontend:
+    image: react-app:latest
+    ports:
+      - "80:3000"
+    networks:
+      - frontend-network
+
+  backend:
+    image: api-server:latest
+    ports:
+      - "8080:8080"
+    networks:
+      - frontend-network
+      - backend-network
+
+  database:
+    image: postgres:15
+    networks:
+      - backend-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+networks:
+  frontend-network:
+    driver: bridge
+  backend-network:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres_data:
+```
+
+## 3. Running Docker Compose Applications
+
+### 3.1. Start Services
 
 ```bash
-cd /path/to/your/project
+# Start services in foreground
+docker compose up
+
+# Start services in background (detached mode)
+docker compose up -d
+
+# Start specific service
+docker compose up web
+
+# Force rebuild of images
+docker compose up -d --build
 ```
 
-### **Step 2: Start the Containers**
-
-Run the following command to build and start the containers:
+### 3.2. Manage Services
 
 ```bash
-docker-compose up
+# List running services
+docker compose ps
+
+# View logs
+docker compose logs
+
+# Follow logs in real-time
+docker compose logs -f
+
+# View logs for specific service
+docker compose logs -f web
+
+# Stop services
+docker compose stop
+
+# Start stopped services
+docker compose start
+
+# Restart services
+docker compose restart
+
+# Restart specific service
+docker compose restart web
 ```
 
-This command will:
-
-- Pull the necessary images from Docker Hub (if they aren't already available locally).
-- Build the services and start the containers.
-
-To start the containers in the background (detached mode), use:
+### 3.3. Stop and Remove
 
 ```bash
-docker-compose up -d
+# Stop and remove containers, networks
+docker compose down
+
+# Stop and remove containers, networks, and volumes
+docker compose down -v
+
+# Remove images as well
+docker compose down --rmi all
 ```
 
-### **Step 3: Verify Services**
-
-To verify that the containers are running, use:
+## 4. Scaling Services
 
 ```bash
-docker-compose ps
+# Scale a service to multiple instances
+docker compose up -d --scale web=3
+
+# Note: You must remove port conflicts when scaling
+# Use a load balancer or remove fixed ports
 ```
 
-This will list the containers, showing their status and port mappings.
+Example with scaling support:
 
-### **Step 4: Stopping and Removing Containers**
+```yaml
+services:
+  web:
+    image: nginx:latest
+    # Don't specify ports when scaling
+    # or use a load balancer
+    deploy:
+      replicas: 3
+```
 
-To stop the services, run:
+## 5. Common Docker Compose Commands
+
+### Build Commands
 
 ```bash
-docker-compose stop
+# Build services
+docker compose build
+
+# Build specific service
+docker compose build web
+
+# Build with no cache
+docker compose build --no-cache
+
+# Build and push images
+docker compose build --push
 ```
 
-To stop and remove the containers, networks, and volumes created by `docker-compose`, run:
+### Execution Commands
 
 ```bash
-docker-compose down
+# Execute command in running service
+docker compose exec web bash
+
+# Execute one-time command
+docker compose run web python script.py
+
+# Run command in new container
+docker compose run --rm web npm install
 ```
 
----
-
-## **4. Scaling Services**
-
-Docker Compose allows you to scale services easily. For instance, to scale the **web** service to 3 instances, run:
+### Maintenance Commands
 
 ```bash
-docker-compose up --scale web=3 -d
+# View resource usage
+docker compose top
+
+# View service logs since specific time
+docker compose logs --since 1h
+
+# Pause services
+docker compose pause
+
+# Unpause services
+docker compose unpause
+
+# Remove stopped containers
+docker compose rm
+
+# Remove all containers (including running)
+docker compose rm -f
 ```
 
-This will create 3 instances of the **web** service, distributing traffic among them.
+### Configuration Commands
 
----
+```bash
+# Validate compose file
+docker compose config
 
-## **5. Docker Compose Commands**
+# View resolved configuration
+docker compose config --resolve-image-digests
 
-Here are some useful Docker Compose commands:
+# Create services from compose file (without starting)
+docker compose create
+```
 
-- **Build or rebuild services:**
+## 6. Using Environment Variables
 
-   ```bash
-   docker-compose build
-   ```
+### 6.1. Create .env File
 
-- **Check container logs:**
+```env
+# .env
+MYSQL_ROOT_PASSWORD=securepassword
+MYSQL_DATABASE=myapp
+MYSQL_USER=dbuser
+MYSQL_PASSWORD=dbpass
+REDIS_HOST=redis
+REDIS_PORT=6379
+```
 
-   ```bash
-   docker-compose logs
-   ```
+### 6.2. Reference in docker-compose.yml
 
-- **View running services:**
+```yaml
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+```
 
-   ```bash
-   docker-compose ps
-   ```
+### 6.3. Override Environment Variables
 
-- **Restart services:**
+```bash
+# Override specific variable
+MYSQL_ROOT_PASSWORD=newpassword docker compose up
 
-   ```bash
-   docker-compose restart
-   ```
+# Use different env file
+docker compose --env-file .env.prod up
+```
 
-- **Remove stopped containers:**
+## 7. Multi-Stage Builds
 
-   ```bash
-   docker-compose rm
-   ```
+```yaml
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: myapp:latest
+```
 
-- **Execute commands in a running service:**
+## 8. Health Checks
 
-   ```bash
-   docker-compose exec <service_name> <command>
-   ```
+```yaml
+services:
+  web:
+    image: nginx:latest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-   For example, to access the shell in a running **web** container:
+  app:
+    image: myapp:latest
+    depends_on:
+      web:
+        condition: service_healthy
+```
 
-   ```bash
-   docker-compose exec web sh
-   ```
+## 9. Docker Compose Best Practices
 
----
+- **Use environment variables**: Store sensitive data in `.env` files or Docker secrets
+- **Use volumes for data persistence**: Ensure database data persists between container restarts
+- **Specify resource limits**: Prevent containers from consuming all system resources
+- **Use specific image versions**: Avoid `latest` tag for production
+- **Organize with multiple compose files**: Use `docker-compose.override.yml` for local development
+- **Use health checks**: Ensure services are healthy before dependent services start
+- **Implement proper restart policies**: Use `restart: unless-stopped` for production
+- **Label your resources**: Add labels for better organization and management
 
-## **6. Docker Compose Best Practices**
+### Example with Best Practices
 
-- **Use environment variables:** Store sensitive data and configuration variables in a `.env` file to keep the `docker-compose.yml` clean.
-- **Use volumes for data persistence:** Ensure that data such as database files are persisted between container restarts using volumes.
-- **Versioning:** Stick to a specific Compose file version (e.g., `version: '3'`) to ensure compatibility across environments.
+```yaml
+services:
+  web:
+    image: nginx:1.25-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./html:/usr/share/nginx/html:ro
+    networks:
+      - frontend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.example.description=Web server"
+      - "com.example.department=IT"
 
----
+networks:
+  frontend:
+    driver: bridge
+```
 
-This guide will help you install Docker Compose and set up multi-container Docker applications easily. By using `docker-compose.yml`, you can manage complex environments with multiple services, containers, and networks.
+## 10. Troubleshooting
 
-## **Author by:**
+### Issue: Port Already in Use
+
+```bash
+# Find what's using the port
+sudo lsof -i :80
+
+# Change port in docker-compose.yml
+# Or stop the conflicting service
+```
+
+### Issue: Container Won't Start
+
+```bash
+# Check logs
+docker compose logs
+
+# Check configuration
+docker compose config
+
+# Rebuild without cache
+docker compose build --no-cache
+```
+
+### Issue: Volume Permission Issues
+
+```bash
+# Fix ownership of mounted volumes
+sudo chown -R $USER:$USER ./data
+
+# Or specify user in compose file
+user: "${UID}:${GID}"
+```
+
+## 11. Additional Resources
+
+- [Official Docker Compose Documentation](https://docs.docker.com/compose/)
+- [Compose File Reference](https://docs.docker.com/compose/compose-file/)
+- [Docker Compose Samples](https://github.com/docker/awesome-compose)
+
+## Author by:
 
 ![test](https://imgur.com/2j6Aoyl.png)
 
