@@ -4,6 +4,8 @@
 
 ### For macOS
 
+#### Option 1: Using Homebrew (Recommended)
+
 1. Open your terminal.
 2. Use Homebrew to download Terraform:
 
@@ -12,12 +14,105 @@
     brew install hashicorp/tap/terraform
     ```
 
+#### Option 2: Using tfenv (Version Manager)
+
+1. Install tfenv using Homebrew:
+
+    ```bash
+    brew install tfenv
+    ```
+
+2. Install the latest Terraform version:
+
+    ```bash
+    tfenv install latest
+    tfenv use latest
+    ```
+
+3. List available versions:
+
+    ```bash
+    tfenv list-remote
+    ```
+
 ### For Windows
+
+#### Option 1: Using Winget (Recommended for Windows 10/11)
+
+1. Open PowerShell or Command Prompt as Administrator.
+2. Install Terraform using Winget:
+
+    ```powershell
+    winget install Hashicorp.Terraform
+    ```
+
+#### Option 2: Using Chocolatey
+
+1. Install Chocolatey if not already installed.
+2. Open PowerShell as Administrator and run:
+
+    ```powershell
+    choco install terraform
+    ```
+
+#### Option 3: Using Scoop
+
+1. Install Scoop if not already installed.
+2. Open PowerShell and run:
+
+    ```powershell
+    scoop install terraform
+    ```
+
+#### Option 4: Manual Installation
 
 1. Download the Windows 64-bit zip archive from the [Terraform website](https://www.terraform.io/downloads.html).
 2. Extract the `terraform.exe` file and place it in a directory included in your system's `PATH`.
 
 ### For Linux
+
+#### Option 1: Using Package Managers
+
+**Ubuntu/Debian:**
+
+```bash
+wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update && sudo apt install terraform
+```
+
+**RHEL/CentOS/Fedora:**
+
+```bash
+sudo yum install -y yum-utils
+sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+sudo yum -y install terraform
+```
+
+**Arch Linux:**
+
+```bash
+sudo pacman -S terraform
+```
+
+#### Option 2: Using tfenv (Version Manager)
+
+1. Install tfenv:
+
+    ```bash
+    git clone --depth=1 https://github.com/tfutils/tfenv.git ~/.tfenv
+    echo 'export PATH="$HOME/.tfenv/bin:$PATH"' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+
+2. Install the latest Terraform version:
+
+    ```bash
+    tfenv install latest
+    tfenv use latest
+    ```
+
+#### Option 3: Manual Installation
 
 1. Download the appropriate package from the [Terraform website](https://www.terraform.io/downloads.html).
 2. Use the following commands to extract and move the Terraform binary:
@@ -125,15 +220,75 @@
 
 ## 9. 🔧 Updating Terraform
 
-1. To update Terraform to the latest version, use the following command for Homebrew (macOS):
+### For Homebrew (macOS)
 
-    ```bash
-    brew upgrade hashicorp/tap/terraform
-    ```
+```bash
+brew upgrade hashicorp/tap/terraform
+```
 
-2. For other systems, download and replace the binary following the same steps as the initial installation.
+### For tfenv (macOS/Linux)
 
-## 10. 📚 Additional Resources
+```bash
+tfenv install latest
+tfenv use latest
+```
+
+### For Winget (Windows)
+
+```powershell
+winget upgrade Hashicorp.Terraform
+```
+
+### For Chocolatey (Windows)
+
+```powershell
+choco upgrade terraform
+```
+
+### For Scoop (Windows)
+
+```powershell
+scoop update terraform
+```
+
+### For Package Managers (Linux)
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update && sudo apt upgrade terraform
+```
+
+**RHEL/CentOS/Fedora:**
+```bash
+sudo yum update terraform
+```
+
+## 10. ⚡ Setting Up Auto-Completion
+
+### For Bash
+
+```bash
+terraform -install-autocomplete
+```
+
+Add to your `~/.bashrc`:
+```bash
+complete -C /usr/local/bin/terraform terraform
+```
+
+### For Zsh
+
+```bash
+terraform -install-autocomplete
+```
+
+### For PowerShell
+
+```powershell
+& terraform -install-autocomplete
+```
+
+## 11. 📚 Additional Resources
 
 - 📖 [Official Terraform Documentation](https://www.terraform.io/docs)
 - 🎓 [HashiCorp Learn](https://learn.hashicorp.com/terraform)

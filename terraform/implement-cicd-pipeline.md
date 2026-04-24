@@ -65,33 +65,108 @@ Popular CI/CD services include:
     on:
       push:
         branches:
-          - master
+          - main
       pull_request:
         branches:
-          - master
+          - main
+      workflow_dispatch:
+
+    permissions:
+      contents: read
+      pull-requests: write
 
     jobs:
       terraform:
+        name: Terraform Plan & Apply
         runs-on: ubuntu-latest
 
         steps:
         - name: Checkout code
-          uses: actions/checkout@v2
+          uses: actions/checkout@v4
+
+        - name: Configure AWS Credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            aws-region: us-west-2
 
         - name: Set up Terraform
-          uses: hashicorp/setup-terraform@v1
+          uses: hashicorp/setup-terraform@v3
           with:
-            terraform_version: 1.0.0
+            terraform_version: 1.7.0
+            terraform_wrapper: false
+
+        - name: Terraform Init
+          run: terraform init
+
+        - name: Terraform Format Check
+          run: terraform fmt -check
+
+        - name: Terraform Validate
+          run: terraform validate
+
+        - name: Terraform Security Scan
+          uses: aquasecurity/tfsec-action@v0.1.0
+
+        - name: Terraform Plan
+          id: plan
+          run: terraform plan -out=tfplan
+
+        - name: Save Plan
+          uses: actions/upload-artifact@v4
+          with:
+            name: tfplan
+            path: tfplan
+
+        - name: Comment PR with Plan
+          uses: actions/github-script@v7
+          if: github.event_name == 'pull_request'
+          with:
+            script: |
+              const output = `#### Terraform Plan 📖\n\n\`\`\`\n${process.env.PLAN}\n\`\`\``;
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: output
+              })
+          env:
+            PLAN: ${{ steps.plan.outputs.stdout }}
+
+        - name: Terraform Apply
+          if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+          run: terraform apply -auto-approve tfplan
+
+      drift-detection:
+        name: Drift Detection
+        runs-on: ubuntu-latest
+        if: github.event_name == 'schedule'
+
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Configure AWS Credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            aws-region: us-west-2
+
+        - name: Set up Terraform
+          uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: 1.7.0
 
         - name: Terraform Init
           run: terraform init
 
         - name: Terraform Plan
-          run: terraform plan
+          run: terraform plan -detailed-exitcode
 
-        - name: Terraform Apply
-          if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-          run: terraform apply -auto-approve
+    env:
+      TF_LOG: INFO
     ```
 
 3. **Commit and push** the workflow file:
@@ -99,7 +174,7 @@ Popular CI/CD services include:
     ```bash
     git add .github/workflows/terraform.yml
     git commit -m "Add Terraform GitHub Actions workflow"
-    git push origin master
+    git push origin main
     ```
 
 ### Step 4: 🔐 Configure Secrets
@@ -109,7 +184,7 @@ Popular CI/CD services include:
 
 ### Step 5: ✅ Trigger the Workflow
 
-1. **Push a change** to the `master` branch or create a pull request.
+1. **Push a change** to the `main` branch or create a pull request.
 2. **Monitor the workflow** on the GitHub Actions tab to ensure it runs successfully.
 
 ## 5. 🌐 Setting Up a CI/CD Pipeline with GitLab CI/CD
@@ -145,30 +220,60 @@ Popular CI/CD services include:
       - validate
       - plan
       - apply
+      - destroy
 
     variables:
-      TF_VERSION: "1.0.0"
+      TF_VERSION: "1.7.0"
       TF_ROOT: "${CI_PROJECT_DIR}"
+      TF_IN_AUTOMATION: "true"
 
     before_script:
       - terraform --version
       - terraform init
+      - terraform fmt -check
 
     validate:
       stage: validate
       script:
         - terraform validate
+      only:
+        - merge_requests
+        - main
 
     plan:
       stage: plan
       script:
-        - terraform plan -out=tfplan
+        - terraform plan -out=tfplan -json > tfplan.json
+      artifacts:
+        paths:
+          - tfplan
+          - tfplan.json
+        expire_in: 1 week
+      only:
+        - merge_requests
+        - main
 
     apply:
       stage: apply
       script:
         - terraform apply -auto-approve tfplan
+      dependencies:
+        - plan
       when: manual
+      only:
+        - main
+
+    security-scan:
+      stage: validate
+      image:
+        name: aquasec/tfsec-ci
+        entrypoint: [""]
+      script:
+        - tfsec .
+      allow_failure: true
+      only:
+        - merge_requests
+        - main
     ```
 
 2. **Commit and push** the pipeline configuration file:
@@ -176,7 +281,7 @@ Popular CI/CD services include:
     ```bash
     git add .gitlab-ci.yml
     git commit -m "Add GitLab CI/CD pipeline configuration"
-    git push origin master
+    git push origin main
     ```
 
 ### Step 4: 🔐 Configure CI/CD Variables
@@ -186,7 +291,7 @@ Popular CI/CD services include:
 
 ### Step 5: ✅ Trigger the Pipeline
 
-1. **Push a change** to the `master` branch or create a merge request.
+1. **Push a change** to the `main` branch or create a merge request.
 2. **Monitor the pipeline** on the GitLab CI/CD tab to ensure it runs successfully.
 
 ## 6. 🌐 Setting Up a CI/CD Pipeline with Jenkins
@@ -206,7 +311,9 @@ Popular CI/CD services include:
         agent any
 
         environment {
-            TF_VERSION = '1.0.0'
+            TF_VERSION = '1.7.0'
+            AWS_ACCESS_KEY_ID = credentials('aws-access-key-id')
+            AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
         }
 
         stages {
@@ -233,19 +340,38 @@ Popular CI/CD services include:
                 }
             }
 
+            stage('Terraform Format') {
+                steps {
+                    sh 'terraform fmt -check'
+                }
+            }
+
+            stage('Terraform Validate') {
+                steps {
+                    sh 'terraform validate'
+                }
+            }
+
             stage('Terraform Plan') {
                 steps {
-                    sh 'terraform plan'
+                    sh 'terraform plan -out=tfplan'
                 }
             }
 
             stage('Terraform Apply') {
                 when {
-                    branch 'master'
+                    branch 'main'
                 }
                 steps {
-                    sh 'terraform apply -auto-approve'
+                    input message: 'Apply Terraform changes?', ok: 'Apply'
+                    sh 'terraform apply -auto-approve tfplan'
                 }
+            }
+        }
+
+        post {
+            always {
+                cleanWs()
             }
         }
     }
@@ -261,7 +387,48 @@ Popular CI/CD services include:
 1. **Push a change** to the repository.
 2. **Monitor the pipeline** in Jenkins to ensure it runs successfully.
 
-## 7. 📚 Additional Resources
+## 7. 🔒 Security Best Practices for CI/CD
+
+### Step 1: 🔐 Use OIDC Authentication
+
+Instead of using long-lived credentials, use OIDC for authentication:
+
+```yaml
+# GitHub Actions with OIDC
+- name: Configure AWS Credentials
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+    aws-region: us-west-2
+```
+
+### Step 2: 🔍 Implement Pre-commit Hooks
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.83.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+      - id: terraform_tflint
+      - id: terraform_tfsec
+      - id: terraform_checkov
+```
+
+### Step 3: 📊 Implement Cost Estimation
+
+```yaml
+- name: Terraform Cost Estimation
+  uses: infracost/infracost-gh-action@v0.10.9
+  with:
+    path: '.'
+  env:
+    INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+```
+
+## 8. 📚 Additional Resources
 
 - 📖 [Official Terraform Documentation](https://www.terraform.io/docs/)
 - 📖 [GitHub Actions Documentation](https://docs.github.com/en/actions)

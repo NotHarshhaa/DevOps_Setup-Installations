@@ -178,10 +178,18 @@ Terraform providers are plugins that allow Terraform to interact with APIs of cl
       required_providers {
         aws = {
           source  = "hashicorp/aws"
+          version = "~> 5.0"
+        }
+        azurerm = {
+          source  = "hashicorp/azurerm"
           version = "~> 3.0"
         }
+        google = {
+          source  = "hashicorp/google"
+          version = "~> 5.0"
+        }
       }
-      required_version = ">= 0.14.0"
+      required_version = ">= 1.0.0"
     }
     ```
 
@@ -193,20 +201,73 @@ Terraform providers are plugins that allow Terraform to interact with APIs of cl
     terraform init -upgrade
     ```
 
+### Step 3: 📋 Check Provider Versions
+
+1. **List installed providers:**
+
+    ```bash
+    terraform providers
+    ```
+
+2. **Show provider requirements:**
+
+    ```bash
+    terraform providers schema -json
+    ```
+
 ## 6. 🛠️ Additional Configuration Options
 
 ### Step 1: 📑 Using Provider Blocks
 
-1. **Configure additional provider settings** as needed. For example, AWS assume role:
+1. **Configure additional provider settings** as needed. For example, AWS assume role with session tags:
 
     ```hcl
     # main.tf
     provider "aws" {
       region = "us-west-2"
+
       assume_role {
         role_arn     = "arn:aws:iam::123456789012:role/RoleName"
         session_name = "TerraformSession"
+        external_id  = var.external_id
       }
+
+      default_tags {
+        tags = {
+          ManagedBy = "Terraform"
+          Environment = var.environment
+        }
+      }
+
+      max_retries = 5
+    }
+    ```
+
+2. **Configure AzureRM provider with features:**
+
+    ```hcl
+    # main.tf
+    provider "azurerm" {
+      features {
+        resource_group {
+          prevent_deletion_if_contains_resources = true
+        }
+      }
+
+      storage_use_azuread = true
+    }
+    ```
+
+3. **Configure Google Cloud provider with region and zone defaults:**
+
+    ```hcl
+    # main.tf
+    provider "google" {
+      project = var.gcp_project
+      region  = var.gcp_region
+      zone    = var.gcp_zone
+
+      user_project_override = true
     }
     ```
 
@@ -230,7 +291,49 @@ Terraform providers are plugins that allow Terraform to interact with APIs of cl
     }
     ```
 
-## 7. 📚 Additional Resources
+## 7. � Provider Configuration Best Practices
+
+### Step 1: 🚀 Provider Caching
+
+1. **Configure provider plugin cache directory** to speed up initialization:
+
+    ```hcl
+    # In ~/.terraformrc or terraform.rc
+    plugin_cache_dir = "$HOME/.terraform.d/plugin-cache"
+    ```
+
+2. **Create the cache directory:**
+
+    ```bash
+    mkdir -p ~/.terraform.d/plugin-cache
+    ```
+
+### Step 2: 🌐 Proxy Configuration
+
+1. **Configure proxy for provider downloads:**
+
+    ```hcl
+    # In ~/.terraformrc or terraform.rc
+    host "releases.hashicorp.com" {
+      proxy = "http://proxy.example.com:8080"
+    }
+    ```
+
+### Step 3: 🔒 Provider Verification
+
+1. **Enable provider signature verification:**
+
+    ```bash
+    export TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=1
+    ```
+
+2. **Verify provider checksums:**
+
+    ```bash
+    terraform providers lock -platform=linux_amd64
+    ```
+
+## 8. �📚 Additional Resources
 
 - 📖 [Official Terraform Providers Documentation](https://www.terraform.io/docs/providers/index.html)
 - 🎓 [HashiCorp Learn - Providers](https://learn.hashicorp.com/collections/terraform/providers)

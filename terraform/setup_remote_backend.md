@@ -59,6 +59,23 @@ Before setting up a remote backend, ensure you have:
         key            = "path/to/my/key"
         region         = "us-west-2"
         dynamodb_table = "terraform-lock"
+        encrypt        = true
+        kms_key_id     = "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012"
+      }
+    }
+    ```
+
+2. **Advanced S3 backend configuration with workspace support:**
+
+    ```hcl
+    terraform {
+      backend "s3" {
+        bucket         = "my-terraform-state"
+        key            = "${terraform.workspace}/terraform.tfstate"
+        region         = "us-west-2"
+        dynamodb_table = "terraform-lock"
+        encrypt        = true
+        acl            = "bucket-owner-full-control"
       }
     }
     ```
@@ -105,6 +122,21 @@ Before setting up a remote backend, ensure you have:
         storage_account_name = "mystorageaccount"
         container_name       = "tfstate"
         key                  = "terraform.tfstate"
+        resource_group_name  = "myResourceGroup"
+      }
+    }
+    ```
+
+2. **Advanced Azure backend with workspace support:**
+
+    ```hcl
+    terraform {
+      backend "azurerm" {
+        storage_account_name = "mystorageaccount"
+        container_name       = "tfstate"
+        key                  = "${terraform.workspace}.tfstate"
+        resource_group_name  = "myResourceGroup"
+        use_azuread_auth     = true
       }
     }
     ```
@@ -148,6 +180,19 @@ Before setting up a remote backend, ensure you have:
     }
     ```
 
+2. **Advanced GCS backend with encryption and workspace support:**
+
+    ```hcl
+    terraform {
+      backend "gcs" {
+        bucket      = "my-terraform-state"
+        prefix      = "terraform/state/${terraform.workspace}"
+        credentials = "path/to/service-account.json"
+        encryption_key = "projects/my-project/locations/us/keyRings/my-keyRing/cryptoKeys/my-key"
+      }
+    }
+    ```
+
 ### Step 3: 🔄 Initialize the Backend
 
 1. **Run the `terraform init` command** to initialize the backend:
@@ -158,7 +203,92 @@ Before setting up a remote backend, ensure you have:
 
 2. **Verify** that Terraform successfully initializes the backend and migrates the state file if needed.
 
-## 7. 📚 Additional Resources
+## 7. ☁️ Setting Up Terraform Cloud Backend
+
+### Step 1: 🔄 Create Terraform Cloud Account
+
+1. **Sign up** for a [Terraform Cloud account](https://app.terraform.io/signup).
+2. **Create an organization** and a workspace.
+
+### Step 2: ⚙️ Configure Terraform Cloud Backend
+
+1. **Create a `backend.tf` file** in your Terraform project directory:
+
+    ```hcl
+    terraform {
+      cloud {
+        organization = "your-organization"
+
+        workspaces {
+          name = "your-workspace"
+        }
+      }
+    }
+    ```
+
+2. **For multiple workspaces:**
+
+    ```hcl
+    terraform {
+      cloud {
+        organization = "your-organization"
+
+        workspaces {
+          prefix = "my-app-"
+        }
+      }
+    }
+    ```
+
+### Step 3: 🔐 Authenticate with Terraform Cloud
+
+1. **Login to Terraform Cloud:**
+
+    ```bash
+    terraform login
+    ```
+
+2. **Or use API token:**
+
+    ```bash
+    export TF_API_TOKEN="your-api-token"
+    ```
+
+### Step 4: 🔄 Initialize the Backend
+
+1. **Run the `terraform init` command** to initialize the backend:
+
+    ```bash
+    terraform init
+    ```
+
+## 8. 🛡️ State Security Best Practices
+
+### Step 1: 🔒 Encrypt State at Rest
+
+- Enable server-side encryption for S3, Azure Blob Storage, or GCS
+- Use customer-managed encryption keys (CMK) when possible
+- Rotate encryption keys regularly
+
+### Step 2: 🔐 Limit Access to State
+
+- Use IAM policies to restrict who can access the state file
+- Implement least privilege access
+- Enable MFA for state access in production
+
+### Step 3: 📋 State Versioning
+
+- Enable versioning on your state storage backend
+- Set appropriate retention policies
+- Archive old state versions for compliance
+
+### Step 4: 🔄 State Backup
+
+- Implement automated state backups
+- Store backups in separate regions/accounts
+- Test state restoration procedures regularly
+
+## 9. 📚 Additional Resources
 
 - 📖 [Official Terraform Documentation](https://www.terraform.io/docs/backends/index.html)
 - 🎓 [HashiCorp Learn - Remote State Management](https://learn.hashicorp.com/collections/terraform/state)

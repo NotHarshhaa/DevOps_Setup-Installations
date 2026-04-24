@@ -33,23 +33,7 @@ Popular tools and services for logging and monitoring include:
     ```hcl
     # backend.tf
     terraform {
-      backend "remote" {
-        organization = "your-organization"
-
-        workspaces {
-          name = "your-workspace"
-        }
-      }
-    }
-    ```
-
-2. **Add the following configuration** to enable logging:
-
-    ```hcl
-    # main.tf
-    resource "terraform_remote_state" "example" {
-      backend = "remote"
-      config = {
+      cloud {
         organization = "your-organization"
         workspaces {
           name = "your-workspace"
@@ -57,6 +41,11 @@ Popular tools and services for logging and monitoring include:
       }
     }
     ```
+
+2. **Enable workspace notifications** in Terraform Cloud settings:
+   - Slack notifications
+   - Email notifications
+   - Webhook integrations
 
 ### Step 3: 🔐 Configure Secrets
 
@@ -71,6 +60,12 @@ Popular tools and services for logging and monitoring include:
     terraform init
     terraform apply
     ```
+
+### Step 5: 📊 Monitor Runs
+
+1. **View run history** in Terraform Cloud dashboard
+2. **Check run logs** for detailed execution information
+3. **Set up cost estimation** to track infrastructure costs
 
 ## 4. 🌐 Setting Up Logging and Monitoring with AWS CloudWatch
 
@@ -106,15 +101,49 @@ Popular tools and services for logging and monitoring include:
       log_group_name = aws_cloudwatch_log_group.terraform.name
     }
 
-    resource "null_resource" "terraform_log" {
-      triggers = {
-        timestamp = "${timestamp()}"
-      }
+    resource "aws_iam_role" "terraform_logging" {
+      name = "terraform-logging-role"
 
-      provisioner "local-exec" {
-        command = "echo 'Terraform apply completed' >> /aws/terraform/${aws_cloudwatch_log_stream.terraform_log_stream.name}"
-      }
+      assume_role_policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Action = "sts:AssumeRole"
+            Effect = "Allow"
+            Principal = {
+              Service = "lambda.amazonaws.com"
+            }
+          }
+        ]
+      })
     }
+
+    resource "aws_iam_role_policy" "terraform_logging_policy" {
+      name = "terraform-logging-policy"
+      role = aws_iam_role.terraform_logging.id
+
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect = "Allow"
+            Action = [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ]
+            Resource = "arn:aws:logs:*:*:*"
+          }
+        ]
+      })
+    }
+    ```
+
+3. **Enable Terraform logging**:
+
+    ```bash
+    export TF_LOG=INFO
+    export TF_LOG_PATH=terraform.log
     ```
 
 ### Step 3: ✅ Apply Configuration
@@ -283,7 +312,70 @@ Popular tools and services for logging and monitoring include:
     terraform apply
     ```
 
-## 8. 📚 Additional Resources
+## 8. 🌐 Setting Up Monitoring with Datadog
+
+### Step 1: 🔄 Install Datadog Agent
+
+1. **Install the Datadog agent** on your infrastructure using Terraform:
+
+    ```hcl
+    # datadog.tf
+    resource "aws_instance" "datadog_agent" {
+      ami           = data.aws_ami.ubuntu.id
+      instance_type = "t3.micro"
+
+      user_data = <<-EOF
+              #!/bin/bash
+              DD_API_KEY="${var.datadog_api_key}"
+              DD_SITE="datadoghq.com"
+              bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script.sh)"
+          EOF
+    }
+    ```
+
+### Step 2: ⚙️ Configure Datadog Integration
+
+1. **Add Terraform integration** in Datadog dashboard
+2. **Create custom metrics** for Terraform state changes
+3. **Set up alerts** for infrastructure changes
+
+### Step 3: 📊 Monitor Terraform Runs
+
+1. **Create Datadog dashboards** for:
+   - Terraform run duration
+   - Resource creation/deletion rates
+   - State file changes
+   - Cost trends
+
+## 9. 🔒 Using Sentinel Policies for Governance
+
+### Step 1: 📝 Create Sentinel Policies
+
+1. **Create a policy file** (e.g., `restrict-s3-bucket-policy.sentinel`):
+
+    ```sentinel
+    import "tfplan/v2" as tfplan
+
+    # Restrict S3 bucket public access
+    all_s3_buckets_public = rule {
+        all tfplan.resource_changes as rc {
+            rc.type is "aws_s3_bucket" and
+            rc.change.after.acl is "private"
+        }
+    }
+
+    main = rule {
+        all_s3_buckets_public
+    }
+    ```
+
+### Step 2: ⚙️ Apply Policies to Workspace
+
+1. **Upload policies** to Terraform Cloud
+2. **Assign policies** to workspaces
+3. **Configure policy enforcement** (soft-mandatory, hard-mandatory, advisory)
+
+## 10. 📚 Additional Resources
 
 - 📖 [Official Terraform Documentation](https://www.terraform.io/docs/)
 - 📖 [AWS CloudWatch Documentation](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html)

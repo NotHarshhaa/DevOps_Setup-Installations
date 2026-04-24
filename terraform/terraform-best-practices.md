@@ -2,9 +2,25 @@
 
 ![banner](https://www.cloudbolt.io/wp-content/uploads/terraform-best-practicies-1024x654-1.png)
 
-## 1. Project Structure and Organization
+## 1. Terraform 1.7+ New Features
 
-### 1.1. Standard Directory Layout
+### 1.1. Improved Refactoring
+- **`terraform state mv` enhancements**: Better support for moving resources between modules
+- **`terraform state replace-provider`**: Replace provider configurations without state loss
+- **`terraform test`:** Built-in testing framework for modules
+
+### 1.2. Configuration Language Improvements
+- **`removed` blocks**: Mark resources as removed with deprecation warnings
+- **`moved` blocks**: Declare resource moves in configuration
+- **Import blocks**: Import resources without CLI commands
+
+### 1.3. Provider Development Kit
+- **Framework-based providers**: Improved provider development experience
+- **Better error messages**: More descriptive error reporting
+
+## 2. Project Structure and Organization
+
+### 2.1. Standard Directory Layout
 ```plaintext
 project-root/
 ├── environments/
