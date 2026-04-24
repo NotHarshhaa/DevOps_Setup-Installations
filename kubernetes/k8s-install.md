@@ -2,65 +2,126 @@
 
 ![k8s](https://imgur.com/bKUeyKX.png)
 
-Certainly! Here's a step-by-step guide to installing Kubernetes (K8s) on Ubuntu from scratch. This guide will walk you through the process of setting up a basic Kubernetes cluster using `kubeadm`, `kubelet`, and `kubectl`.
+This guide will walk you through the process of setting up a basic Kubernetes cluster using `kubeadm`, `kubelet`, and `kubectl` with containerd as the container runtime.
 
-**Prerequisites:**
+## Prerequisites
 
-1. **Ubuntu**: You should have a clean installation of Ubuntu on the machines where you plan to set up your Kubernetes cluster.
+1. **Ubuntu**: You should have a clean installation of Ubuntu (20.04 LTS or 22.04 LTS recommended) on the machines where you plan to set up your Kubernetes cluster.
 
-2. **Minimum 2 Nodes**: For a basic Kubernetes cluster, you need at least two nodes - one for the master and one or more for worker nodes.
+2. **Minimum 2 Nodes**: For a basic Kubernetes cluster, you need at least two nodes - one for the control plane and one or more for worker nodes.
 
 3. **Network Configuration**: Ensure that your nodes can communicate with each other over the network. You should have a static IP address for each node.
 
 4. **Root Privileges**: You need to run some commands with root privileges, so make sure you have `sudo` access.
 
-**Step 1: Update and Install Required Packages**
+5. **Hardware Requirements**:
+   - 2 GB RAM or more per machine (2GB+ recommended for control plane)
+   - 2 CPUs or more
+   - Stable internet connection for pulling images
+
+## Step 1: Update System and Install Required Packages
 
 ```bash
 sudo apt update
-sudo apt install -y docker.io
-sudo systemctl enable docker
-sudo systemctl start docker
+sudo apt install -y apt-transport-https ca-certificates curl gnupg lsb-release
 ```
 
-**Step 2: Disable Swap**
+## Step 2: Install and Configure containerd
 
-Kubernetes requires that swap be disabled. You can disable it temporarily with the following command:
+Kubernetes uses containerd as the default container runtime since v1.24.
 
 ```bash
+# Add Docker's GPG key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Set up the repository
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install containerd
+sudo apt update
+sudo apt install -y containerd.io
+
+# Configure containerd
+sudo mkdir -p /etc/containerd
+containerd config default | sudo tee /etc/containerd/config.toml
+
+# Enable SystemdCgroup for better compatibility with Kubernetes
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+
+# Start and enable containerd
+sudo systemctl restart containerd
+sudo systemctl enable containerd
+```
+
+## Step 3: Disable Swap
+
+Kubernetes requires that swap be disabled.
+
+```bash
+# Disable swap temporarily
 sudo swapoff -a
+
+# Disable swap permanently by commenting out swap entry in /etc/fstab
+sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 ```
 
-To disable it permanently, edit the `/etc/fstab` file and comment out the line that references swap:
+## Step 4: Load Kernel Modules and Configure System Parameters
 
 ```bash
-sudo nano /etc/fstab
-# Comment out the line containing swap
+# Load required kernel modules
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+# Configure sysctl parameters
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+# Apply sysctl parameters
+sudo sysctl --system
 ```
 
-**Step 3: Install Kubernetes Tools**
+## Step 5: Install Kubernetes Tools
 
 ```bash
-sudo apt install -y curl apt-transport-https
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
-echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+# Add Kubernetes apt repository GPG key
+sudo curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+# Add Kubernetes repository
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+# Update package list and install Kubernetes components
 sudo apt update
 sudo apt install -y kubelet kubeadm kubectl
+
+# Pin Kubernetes package version to prevent automatic updates
+sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
-**Step 4: Initialize the Kubernetes Master Node**
+## Step 6: Initialize the Kubernetes Control Plane Node
 
-On your master node, initialize the Kubernetes cluster using `kubeadm`. Replace `MASTER_IP` with the actual IP address of your master node.
+On your control plane node, initialize the Kubernetes cluster using `kubeadm`. Replace `CONTROL_PLANE_IP` with the actual IP address of your control plane node.
 
 ```bash
-sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=MASTER_IP
+sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=CONTROL_PLANE_IP
 ```
 
-After the initialization is complete, you will see a message with a `kubeadm join` command to add worker nodes to the cluster. Make sure to save this command for later use.
+After the initialization is complete, you will see a message with a `kubeadm join` command to add worker nodes to the cluster. **Save this command for later use.**
 
-**Step 5: Set Up Kubectl for Your User**
+## Step 7: Set Up kubectl for Your User
 
-Run these commands on your master node to configure `kubectl` for your user:
+Run these commands on your control plane node to configure `kubectl` for your user:
 
 ```bash
 mkdir -p $HOME/.kube
@@ -68,31 +129,79 @@ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-**Step 6: Install a Network Plugin**
+## Step 8: Install a Network Plugin (CNI)
 
-Choose a network plugin for your cluster. In this example, we'll use Calico:
+Choose a network plugin for your cluster. Calico is recommended for production environments.
 
 ```bash
-kubectl apply -f https://docs.projectcalico.org/v3.18/manifests/calico.yaml
+# Install Calico CNI
+kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
 ```
 
-**Step 7: Join Worker Nodes**
-
-On each worker node, run the `kubeadm join` command you saved from Step 4. It should look something like this:
-
+Alternative: Flannel (simpler, suitable for testing)
 ```bash
-sudo kubeadm join MASTER_IP:6443 --token TOKEN --discovery-token-ca-cert-hash SHA256_HASH
+kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 ```
 
-**Step 8: Verify Cluster**
+## Step 9: Join Worker Nodes
 
-Back on the master node, you can check the status of your cluster:
+On each worker node, run the `kubeadm join` command you saved from Step 6. It should look something like this:
 
 ```bash
+sudo kubeadm join CONTROL_PLANE_IP:6443 --token TOKEN --discovery-token-ca-cert-hash SHA256_HASH
+```
+
+If you've lost the join token, you can generate a new one on the control plane:
+```bash
+kubeadm token create --print-join-command
+```
+
+## Step 10: Verify Cluster Status
+
+Back on the control plane node, check the status of your cluster:
+
+```bash
+# Check node status
 kubectl get nodes
+
+# Check system pods
+kubectl get pods -n kube-system
+
+# Check cluster info
+kubectl cluster-info
 ```
 
-You should see all nodes in the "Ready" state.
+You should see all nodes in the "Ready" state and all system pods running.
+
+## Optional: Enable Autocompletion for kubectl
+
+```bash
+# Bash autocompletion
+echo 'source <(kubectl completion bash)' >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh autocompletion
+echo 'source <(kubectl completion zsh)' >> ~/.zshrc
+source ~/.zshrc
+```
+
+## Troubleshooting
+
+**If nodes are NotReady:**
+```bash
+# Check kubelet logs
+sudo journalctl -xeu kubelet
+
+# Check if CNI pods are running
+kubectl get pods -n kube-system
+```
+
+**If kubeadm init fails:**
+```bash
+# Reset and retry
+sudo kubeadm reset
+sudo kubeadm init --pod-network-cidr=192.168.0.0/16
+```
 
 Congratulations! You've successfully installed Kubernetes on Ubuntu from scratch. You can now deploy and manage containers using Kubernetes.
 
